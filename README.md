@@ -68,3 +68,48 @@ All code and data for the final analyses can be founf in the *r_publication.Rmd*
 
 
 ## Theme 3. Maunalua Fishpond Heritage Center Dashboard
+
+<img src="SpiceLogo1.png" width="240" /> <img src="mfhc.jpeg" width="180" />
+
+**About**
+
+Nearly all of Hawai‘i’s freshwater springs have disappeared – many filled in for development, ending the fresh and salt water connection that is critical to the life cycle of many native species. In Kuli‘ou‘ou, we had a rare opportunity to permanently protect a fertile estuary that is home to rare freshwater limpets pipiwai and hapawai that cling to the Hawaiian drystack wall lining the spring, ‘ama‘ama (mullet) and āholehole (young Hawaiian flagtail) that feed on the prized green limu ‘ele‘ele that blankets the spring floor, native shrimp ‘opae ‘oeha‘a and ‘opae huna, and endangered ‘ae‘o (Hawaiian stilts) that feed in Kānewai Fishpond. This effort also protects the many cultural sites surrounding the spring including the mākāhā (fishpond sluice gate), and kū‘ula (fishing stone shrine) with an upright Kū stone balanced by a low Hina stone where the fishermen of old would have given offerings asking for a plentiful catch.
+
+
+**Goal of this Work**
+
+Clean, Analyze, and share data from Kalauhaʻihaʻi and Kānewai with the MFHC Team and surrounding community
+
+**Results**
+
+The primary research goal is to develop a Dashboard that displays pH, oxygen, conductivity, and temperature data collected by the Chaminade University of Honolulu Environmental Science Dept from Kalauhaʻihaʻi and Kānewai
+
+[Beta Dashboard](https://connorflynn.shinyapps.io/maunalua-fishpond-heritage-center/?_ga=2.191367721.2028241035.1678747718-1779377801.1678413849#section-kalauhaihai)
+
+
+## Theme 4. Mapping Tutorial for the United States - Affiliated Pacific Islands (USAPI)
+
+**About**
+
+The USAPI include the three U.S. Flag Territories of Guam, the Commonwealth of the Northern Mariana Islands, and American Samoa, as well as the three Freely Associated States (independent nations in a special compact relationship with the United States) of the Republic of Palau, the Republic of the Marshall Islands, and the Federated States of Micronesian (Pohnpei, Kosrae, Chuuk, and Yap).
+
+The USAPI are populated by more than 500,000 inhabitants who live on hundreds of remote islands and atolls spanning millions of square miles of the Pacific Ocean and crossing five time zones, including the international dateline.  These islands are culturally and linguistically diverse with more than a dozen spoken languages. While the indigenous peoples of the USAPI are rich in culture they are considerably small in population.  The islands are socially, politically and economically fragile but they are bountiful with rich marine and land-based eco-systems and numerous wildlife that cannot be found anywhere else on earth.
+
+**Goal of this Work**
+
+
+<img src="SpiceLogo1.png" width="240" /> <img src="cifal_logo.png" width="200" />
+
+Utlize the urbnmapr package to create choropleth maps of the US that include Guam, American Samoa, and the Commonwealth of the Northern Mariana Islands
+
+The urbnmapr package is a good start but does not include:
+- Palau
+- Marshall Islands
+- Federated States of Micronesia (FSM)
+
+Next steps include:
+- Shifting and Enlarging the geometries of the USAPI to be include on a standard US choropleth map
+
+
+
+
