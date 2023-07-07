@@ -57,7 +57,7 @@ The main goal of this project is to assess the staus of Small Island Developing 
 We accessed the [UNODC Status of Country Data Submissions by Data Collection Campaign Year](https://dataunodc.un.org/content/ms-data-collection-log) to create a dataset based on completion of 5 surveys shown below.
 
 
-<img src="UNODC_survey.png" width="820" />
+<img src="logos/UNODC_survey.png" width="820" />
 
 
 [Global Organized Crime Index](https://ocindex.net/) 
