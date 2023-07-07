@@ -56,14 +56,15 @@ The main goal of this project is to assess the staus of Small Island Developing 
 
 We accessed the [UNODC Status of Country Data Submissions by Data Collection Campaign Year](https://dataunodc.un.org/content/ms-data-collection-log) to create a dataset based on completion of 5 surveys shown below.
 
+
+<img src="UNODC_survey.png" width="820" />
+
+
 [Global Organized Crime Index](https://ocindex.net/) 
-
-<img src="unodc_survey_2.png" width="820" />
-
-
 
 ### Results
 
 All code and data for the final analyses can be founf in the *r_publication.Rmd*
 
 
+## Theme 3. Maunalua Fishpond Heritage Center Dashboard
