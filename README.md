@@ -15,7 +15,7 @@ Each of these project themes has it's own folder in this repository that contain
 
 ## Theme 1. Monitoring Global Aid - Focus: Small Island Developing States (SIDS)
 
-<img src="SpiceLogo1.png" width="240" /> <img src="cifal_logo.png" width="200" />
+<img src="logos/SpiceLogo1.png" width="240" /> <img src="logos/cifal_logo.png" width="200" />
 
 **Goal of this work**
 
@@ -44,7 +44,7 @@ Final results are displayed and described in this R Publication: [SIDS-Focused A
 
 ## Theme 2. Criminal Justice in SIDS
 
-<img src="SpiceLogo1.png" width="240" /> <img src="cifal_logo.png" width="200" />
+<img src="logos/SpiceLogo1.png" width="240" /> <img src="logos/cifal_logo.png" width="200" />
 
 **Goal of this Work**
 
@@ -69,7 +69,7 @@ All code and data for the final analyses can be founf in the *r_publication.Rmd*
 
 ## Theme 3. Maunalua Fishpond Heritage Center Dashboard
 
-<img src="SpiceLogo1.png" width="240" /> <img src="mfhc.jpeg" width="180" />
+<img src="logos/SpiceLogo1.png" width="240" /> <img src="logos/mfhc.jpeg" width="180" />
 
 **About**
 
@@ -98,7 +98,7 @@ The USAPI are populated by more than 500,000 inhabitants who live on hundreds of
 **Goal of this Work**
 
 
-<img src="SpiceLogo1.png" width="240" /> <img src="cifal_logo.png" width="200" />
+<img src="logos/SpiceLogo1.png" width="240" /> <img src="logos/cifal_logo.png" width="200" />
 
 Utlize the urbnmapr package to create choropleth maps of the US that include Guam, American Samoa, and the Commonwealth of the Northern Mariana Islands
 
