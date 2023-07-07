@@ -1,0 +1,197 @@
+---
+title: "Clustering"
+author: "Connor Flynn"
+date: "5/21/2023"
+output: html_document
+---
+
+
+Goal of this Rmd: Cluster countries based on ND-GAIN Data
+
+Steps:
+- Reshape data
+- Impute missing Data
+- Determine optimal # of clusters
+- Cluster data
+- Analyze results
+
+Load in Libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(ClustImpute)
+library(caret)
+library(Hmisc)
+#library(estlibrary)
+
+options(scipen = 99)
+options(ggrepel.max.overlaps = Inf)
+set.seed(3)
+```
+
+
+
+Read in Data
+
+[ND-GAIN Country Index](https://gain.nd.edu/our-work/country-index/)
+
+The ND-GAIN Country Index summarizes a country's vulnerability to climate change and other global challenges in combination with its readiness to improve resilience. It aims to help governments, businesses and communities better prioritize investments for a more efficient response to the immediate global challenges ahead.
+
+
+```{r}
+nd_gain_data <- read_csv(here("SIDS_Data_Platform_ND-GAIN/data/nd-gain-joined.csv"))
+```
+
+
+Round values in the value column to 2 digits after the decimal
+
+```{r}
+nd_gain_data$value <- round(nd_gain_data$value, digits = 2)
+```
+
+
+**Challenge**
+
+The dataset is slightly flawed because if a value is not measured one year, it simply gets carried over from the previous year
+
+So simply think of filtering for the year 2020 as using the most recent year of available data (warning: this can lead to 20 year old data being visualized)
+
+
+```{r}
+nd_gain_data <- nd_gain_data %>% 
+  filter(year == 2020)
+```
+
+Shift dataframe so that each value in the indicator column becomes it's own column 
+ - This gives us 190 rows (one country per row) with 48 indicators
+
+```{r}
+nd_gain_data <- nd_gain_data %>% 
+  pivot_wider(names_from = indicator, 
+              values_from = value)
+  
+```
+
+Remove non-numeric columns
+
+```{r}
+nd_gain_data <- nd_gain_data %>% 
+  select(-ISO3, -year, -sids_context, -population, -innovation)
+```
+
+Make country names the row name 
+
+```{r}
+nd_gain_data <- nd_gain_data %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="Name")
+```
+
+Only keep columns where at least 80% of the data is present
+
+```{r}
+nd_gain_data_less_na <- nd_gain_data[, which(colMeans(!is.na(nd_gain_data)) > 0.8)]
+
+```
+
+
+
+Impute using ClustImpute
+
+* For nr_cluster = x, we are determining the number of clusters that we believe there are in the data
+  - This number can be changed and has significant influence on the output data
+
+```{r}
+res <- ClustImpute(nd_gain_data_less_na, nr_cluster = 2)
+```
+
+
+Go into the ClustImpute object and retrieve the imputed data frame
+
+```{r}
+
+nd_gain_data_Clust_Impute <- res$complete_data
+
+```
+
+
+Normalize the Data
+
+```{r}
+process <- preProcess(as.data.frame(nd_gain_data_Clust_Impute), method=c("range"))
+
+normalized_nd_gain <- predict(process, as.data.frame(nd_gain_data_Clust_Impute))
+```
+
+
+
+
+Histograms
+
+```{r}
+hist.data.frame(normalized_nd_gain)
+
+```
+
+
+This visualization helps us to determine the number of clusters that should be used in the kmeans() function
+
+```{r}
+fviz_nbclust(normalized_nd_gain, kmeans, method = "silhouette")
+```
+
+
+
+Cluster the newly imputed data
+```{r}
+set.seed(3)
+kmeans2 <- kmeans(normalized_nd_gain, center = 2, nstart = 100)
+```
+
+Visualize clusters
+```{r}
+fviz_cluster(kmeans2, data = normalized_nd_gain,
+geom = c("text","point"),
+             repel = TRUE,            # Avoid label overlapping
+             show.clust.cent = TRUE, # Show cluster centers
+             palette = "lancet",         # Color palette see ?ggpubr::ggpar
+             ggtheme = theme_bw()+
+              theme(axis.text.x = element_text( hjust = 0.5, vjust = 0.5, size=2),
+        axis.title.x =element_text(size=20),
+        axis.text.y = element_text(hjust = 0.5, vjust = 0.5, size=2),
+        axis.title.y =element_text(size=2),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"),
+        strip.text = element_text(size=2)))
+```
+View Clusters as Dataframe
+
+```{r}
+nd_gain_data_Clust_Impute_clusters <- as.data.frame(kmeans2$cluster)
+```
+
+Put countries back into column Name
+
+```{r}
+nd_gain_data_Clust_Impute_clusters <- rownames_to_column(nd_gain_data_Clust_Impute_clusters, "Name")
+```
+
+Give the cluster column the name cluster2
+
+```{r}
+names(nd_gain_data_Clust_Impute_clusters)[names(nd_gain_data_Clust_Impute_clusters) == "kmeans2$cluster"] <- "cluster2"
+```
+
+Write this as it's own csv file so it can be joined with the main ND-GAIN data
+
+```{r}
+# write_csv(nd_gain_data_Clust_Impute_clusters, here("SIDS_Data_Platform_ND-GAIN/data/two_cluster_data.csv"))
+```
+

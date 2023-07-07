@@ -1,0 +1,358 @@
+---
+title: "Analysis of Criminal Justice in Small Island Developing States"
+author: "Andrew Nishitomi, Connor Flynn"
+date: "5/9/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(janitor)
+library(ggcorrplot)
+library(gridExtra)
+library(fmsb)
+library(plotly)
+```
+
+![](/Users/connorflynn/Documents/SDG/SIDS_SDG_UNSTATS/visualizations/cifal_logo.png){width=150} 
+
+![](/Users/connorflynn/Documents/SDG/SIDS_SDG_UNSTATS/visualizations/cuh_logo_2.png){width=150} 
+
+
+
+# Results of this Work
+
+### Result 1 
+- Analyze why there is no Criminal Justice related data for SIDS through the United Nations Indicator Database
+- Identify the data gaps in SIDS reporting Criminal Justice Data to the  United Nations
+
+### Result 2 
+ - Analyze the Global Organized Crime Index through a SIDS - specific lens and visualize the data in a manner that can be integrated into the UNDP SIDS Data Platform 
+
+#### Data Sources 
+
+[Global Organized Crime Index](https://ocindex.net/) 
+
+
+[United Nations Office on Drugs and Crime, Reporting](https://dataunodc.un.org/content/ms-data-collection-log)
+
+
+
+
+## Display of Criminal Justice data gaps in Small Island Developing States(SIDS)
+```{r, include=FALSE, results='hide'}
+sids_reporting <- read_csv(here("Criminal_Justice_SIDS/data/UN_CJ_Data_Instruments_SIDS_Reporting.csv"))
+
+non_sids_reporting <- read_csv(here("Criminal_Justice_SIDS/data/UN_CJ_Data_Instruments _Non_SIDS_Reporting.csv"))
+
+```
+
+
+```{r, include=FALSE, results='hide'}
+sids_reporting <- sids_reporting %>% 
+  clean_names()
+
+non_sids_reporting <- non_sids_reporting %>% 
+  clean_names()
+
+```
+
+
+
+```{r, include=FALSE, results='hide'}
+sids_reporting <- sids_reporting %>% 
+  filter(year!= 2017 & year!= 2018)
+
+sids_reporting <- sids_reporting %>% 
+  filter(country_territory!= "Wallis & Futuna" )
+
+```
+
+
+```{r, include=FALSE, results='hide'}
+
+colnames(sids_reporting)[colnames(sids_reporting) == "received"] <- "completion_status"
+
+colnames(non_sids_reporting)[colnames(non_sids_reporting) == "received"] <- "completion_status"
+```
+
+
+
+```{r, include=FALSE, results='hide'}
+
+sids_reporting$completion_status <- as.character(sids_reporting$completion_status)
+
+non_sids_reporting$completion_status <- as.character(non_sids_reporting$completion_status)
+
+```
+
+
+```{r, include=FALSE, results='hide'}
+
+sids_reporting["completion_status"][sids_reporting["completion_status"] == "0"] <- "not_completed"
+
+sids_reporting["completion_status"][sids_reporting["completion_status"] == "1"] <- "completed"
+
+
+non_sids_reporting["completion_status"][non_sids_reporting["completion_status"] == "0"] <- "not_completed"
+
+non_sids_reporting["completion_status"][non_sids_reporting["completion_status"] == "1"] <- "completed"
+```
+
+
+
+```{r, include=FALSE, results='hide'}
+sids_reporting_grouped <- sids_reporting %>% 
+  group_by(region, completion_status, data_collection) %>% 
+  count()
+```
+
+
+```{r, include=FALSE, results='hide'}
+reporting_status_sids <- ggplot(data = sids_reporting_grouped, aes(x= data_collection, y=n, fill=completion_status)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~region) +
+  theme_minimal() +
+  scale_fill_brewer(palette="Dark2") +
+  labs(title = "Reporting Status for 5 UN Surveys from 2019 - 2022, SIDS",
+       x = "Survey Type",
+       y = "Number of Surveys Completed / Not Completed") +
+  theme(axis.text.x = element_text(size = 7, vjust = 1, hjust = 1),
+        axis.text.y = element_text(size = 7),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12)) +
+  coord_flip()
+
+reporting_status_sids
+
+#ggsave(reporting_status_sids, file= here("visualizations/reporting_status_sids.png"), scale=2)
+
+
+
+```
+
+In this horizontal bar chart, the data collection shows the 5 UN Surveys (ARQ, UN-IFAQ, UN-CTS, IDS, and GLOTIP) that were completed by SIDS from 2019 - 2022. The vertical axis displays the survey type and the horizontal axis is the number of suveys completed and not completed. 
+
+```{r}
+reporting_status_sids
+```
+
+
+```{r, include=FALSE, results='hide'}
+non_sids_reporting_grouped <- non_sids_reporting %>% 
+  group_by(region, completion_status, data_collection) %>% 
+  count()
+```
+
+In this horizontal bar chart, the data collection shows the 5 UN Surveys (ARQ, UN-IFAQ, UN-CTS, IDS, and GLOTIP) that were completed by NON-SIDS from 2019 - 2022. The vertical axis displys the type of surveys and the horizontal axis is the number of surveys completed and not completed. 
+
+
+```{r, include=FALSE, results='hide'}
+reporting_status_nonsids <- ggplot(data = non_sids_reporting_grouped, aes(x= data_collection, y=n, fill=completion_status)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~region) +
+  theme_minimal() +
+  scale_fill_brewer(palette="Dark2") +
+  labs(title = "Reporting Status for 5 UN Surveys from 2019 - 2022, Non-SIDS",
+       x = "Survey Type",
+       y = "Number of Surveys Completed / Not Completed") +
+  theme(axis.text.x = element_text(size = 7, vjust = 1, hjust = 1),
+        axis.text.y = element_text(size = 7),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12))+
+  coord_flip()
+  
+reporting_status_nonsids
+```
+```{r}
+reporting_status_nonsids
+```
+
+
+
+
+
+<!-- Rearranging columns so that data set shows country_territory, data_collection_year, completion_status -->
+```{r, include=FALSE, results='hide'}
+sids_reporting_matrix <- sids_reporting %>% 
+  select(year, completion_status, data_collection, country_territory)
+
+sids_reporting_matrix$data_collection_year <- paste(sids_reporting_matrix$data_collection, "_", sids_reporting_matrix$year)
+
+sids_reporting_matrix <- sids_reporting_matrix %>% 
+  select(country_territory, data_collection_year, completion_status)
+```
+
+
+
+
+This Heat Graph shows the completion status per year for every data collection for all SIDS from the years 2019 - 2022 for each of the four surveys(ARQ, UN-IFAQ, UN-CTS, IDS, and GLOTIP)
+```{r, include=FALSE, results='hide'}
+reporting_status_matrix <- ggplot(sids_reporting_matrix, aes(x = data_collection_year, y = country_territory, fill = completion_status)) +
+  geom_tile(color = "white",
+            lwd = 1,
+            linetype = 1) +
+  coord_fixed() +
+  labs(x = "Survey Type & Year",
+       y = "SIDS") +
+  theme(axis.text.x = element_text(angle = 45, size = 6, vjust = 1, hjust = 1),
+        axis.text.y = element_text(size = 9),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12),
+        legend.title = element_text(size = 6),
+  legend.text = element_text(size = 12)) +
+  scale_fill_brewer(palette="Dark2") 
+
+reporting_status_matrix
+```
+```{r}
+reporting_status_matrix
+```
+
+```{r, include=FALSE, results='hide', message=FALSE}
+global_oc_index_spider <- read_csv(here("Criminal_Justice_SIDS/data/global_oc_index_2021_sids_category.csv"))
+```
+
+### Explanation of resilience minus criminality to get overall score
+
+In this horizontal bar chart, we wanted to look at the SIDS overall criminality scores. In doing, we took the resillience score and subtracted from the criminality score to achieve the overal_score. For the SIDS with a postive score, there can be assumptions made that the country is making an effort to bring up their resilience towards crime so that they can decrease their criminality score. For the countries that have a negative score, their criminality scores outweigh the resilience score. Therefore, the conclusion can be made that their resilience methods needs to be improved upon. 
+
+
+```{r, include=FALSE, results='hide'}
+global_oc_index_spider <- global_oc_index_spider %>% 
+  clean_names() 
+
+
+
+global_oc_index_spider <- global_oc_index_spider %>%
+  mutate(overall_score = resilience - criminality)
+```
+
+
+```{r, include=FALSE, results='hide'}
+global_oc_index_spider_sids <- global_oc_index_spider %>% 
+  filter(sids_category == "sids")
+  
+```
+
+
+```{r, include=FALSE, results='hide'}
+sids_overall_score_plot <- ggplot(data = global_oc_index_spider_sids, aes(x = overall_score,
+                                                                          y = reorder(country, overall_score),
+                                                                          fill = region)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Paired")
+
+sids_overall_score_plot
+```
+```{r}
+sids_overall_score_plot
+```
+
+
+```{r, include=FALSE, results='hide'}
+oc_index <- read_csv(here("Criminal_Justice_SIDS/data/global_oc_index_2021_sids_category.csv"))
+```
+
+```{r, include=FALSE, results='hide'}
+oc_index <- oc_index %>% 
+  clean_names()
+```
+
+```{r, include=FALSE, results='hide'}
+oc_index_sids <- oc_index %>% 
+  filter(sids_category == "sids")
+```
+
+```{r, include=FALSE, results='hide'}
+oc_index_sids <- oc_index_sids %>% 
+  select(-continent, -region, -country_code, -sids_category) 
+```
+
+```{r, include=FALSE, results='hide'}
+oc_index_sids_longer <- oc_index_sids %>% 
+  pivot_longer(cols = criminality:non_state_actors,
+               names_to = "measure",
+               values_to = "value")
+
+```
+
+Looking at the OC index data frame, this heat map displays the values for each criminality and resilience measure. Orange is the highest value while yellow displays the lowest possible value. 
+
+```{r}
+heatmap <- ggplot(data = oc_index_sids_longer, aes(x = measure,
+                                        y = country,
+                                        fill = value)) +
+  geom_tile() +
+  theme(axis.text.x = element_text(angle = 45, size = 6, vjust = 1, hjust = 1)) +
+   scale_fill_gradient(low = "yellow", high = "red")
+
+ggplotly(heatmap)
+```
+
+
+```{r, include=FALSE, results='hide'}
+global_oc_index_spider_sids_criminality <- global_oc_index_spider_sids %>% 
+  select(country, criminality)
+```
+
+
+```{r, include=FALSE, results='hide'}
+global_oc_index_spider_sids_criminality_wider <- global_oc_index_spider_sids_criminality %>% 
+  pivot_wider(names_from = country,
+              values_from = criminality)
+```
+
+```{r, include=FALSE, results='hide'}
+radar_data <- rbind(rep(8,4) , rep(0,8) , global_oc_index_spider_sids_criminality_wider)
+```
+
+
+```{r, include=FALSE, results='hide'}
+radar_data <- radar_data[, order(radar_data[3, ])]
+```
+
+```{r, include=FALSE, results='hide'}
+radar_data <- radar_data[, rev(order(radar_data[3,]))]
+```
+
+```{r, include=FALSE, results='hide'}
+colors_border=c( rgb(0.2,0.5,0.5,0.9), rgb(0.8,0.2,0.5,0.9) , rgb(0.7,0.5,0.1,0.9) )
+colors_in=c( rgb(0.2,0.5,0.5,.8), rgb(0.8,0.2,0.5,.8) , rgb(0.7,0.5,0.1,.8) )
+```
+
+The spider plot displays the values of their criminality scores. Starting from the lowest possible score to the highest possible score. 
+```{r}
+radarchart(radar_data, axistype=1 , pcol=colors_border , pfcol=colors_in , plwd=3 , plty=1, cglcol="dark grey", cglty=1, axislabcol="grey", caxislabels=seq(0,20,5), cglwd=0.95,vlcex=0.8)
+
+
+```
+
+
+
+<!-- Next steps: -->
+
+<!-- Rest of the viz from the poster, other bar chart and matrix with years (done) -->
+
+<!-- OC Index  -->
+
+<!-- horizontal bars with overall scores (done) -->
+<!--   - explanation of resilience minus criminality to get overall score -->
+
+<!-- tile plot  -->
+
+<!-- spider plot done -->
+
+
+
+<!-- **bold** -->
+
+<!-- *italics* -->
+
+<!-- ### List  -->
+<!--   1. One -->
+<!--   2. Two -->
+<!--   3. [the data](https://rpubs.com/connorflynn/1038350) -->

@@ -1,0 +1,156 @@
+---
+title: "ND- GAIN Data Correlation Matrix"
+author: "Connor"
+date: "5/19/2023"
+output: html_document
+---
+
+Load Packages and Libraries
+
+```{r setup, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+library(ggcorrplot)
+library(plotly)
+library(naniar)
+```
+
+Read in the data
+
+
+```{r}
+dataset <- read_csv(here("SIDS_Data_Platform_ND-GAIN/data/nd-gain-joined.csv"))
+```
+
+
+Round decimals in the value column
+
+
+```{r}
+dataset$value <- round(dataset$value, digits = 2)
+```
+
+
+
+
+Select for Year 2020
+
+
+**Challenge**
+
+
+The dataset is slightly flawed because if a value is not measured one year, it simply gets carried over from the previous year
+
+```{r}
+dataset_2020 <- dataset %>% 
+  filter(year == 2020)
+
+dataset_2015 <- dataset %>% 
+  filter(year == 2015)
+
+sum(is.na(dataset_2020$value))
+sum(is.na(dataset_2015$value))
+
+
+
+```
+
+So simply think of this as using the most recent year of available data (warning: this can lead to 20 year old data being visualized)
+
+
+```{r}
+dataset_most_recent <- dataset %>% 
+  filter(year == 2020)
+```
+
+Pivot Wider
+We do this so that instead of having an indicator column with each indicator as a value in that column, we have each indocator as it's own column in the dataset. 
+- This gives us 190 rows (one country per row) with 48 indicators
+
+```{r}
+dataset_most_recent_wider <- dataset_most_recent %>% 
+  pivot_wider(names_from = indicator, 
+              values_from = value)
+  
+```
+
+
+To create our correlation matrix, we only want columns with numeric values to be in our datframe so here, we take out non-numeric columns
+
+
+```{r}
+dataset_most_recent_wider_numeric <- dataset_most_recent_wider %>% 
+  select(-ISO3, -year, -Name, -sids_context)
+```
+
+
+Here, we create the correlation matrix
+
+```{r}
+cor_matrix <- cor(dataset_most_recent_wider_numeric[complete.cases(dataset_most_recent_wider_numeric), ], use = "pairwise.complete.obs")
+```
+
+Plot the Correlation matrix
+
+```{r}
+corrplot <- ggcorrplot(cor_matrix, type = "lower", outline.color = "black") +
+  theme(axis.text.x = element_text(size = 3),
+        axis.text.y = element_text(size = 3)) 
+
+
+corrplot
+```
+
+How to Interpret:
+
+Here we have all of our indicators on the x an y axis. With this visualization, the relationships between each variable are described with color. 
+
+- Looking at the legend, we see a range from dark red (inidcating a strong positive correlation) to dark purple (indicating a strong negative correlation)
+  - Positive Correlation -> as one indicator (variable) increases, so does the other / as one indicator (variable) decreases, so does the other 
+  - Negative Correleation -> as one indicator (variable) increases, the other indicator (variable) decreases / as one indicator (variable) decreases, the other indicator (variable) increases 
+  
+*Always test what you see in a correlation matrix by putting the two correlated variables into a scatter plot*
+
+
+Make the Correlation Matrix Plot Interactive with ggplotly
+
+```{r}
+ggplotly(corrplot)
+```
+
+
+Filter for SIDS
+
+```{r}
+dataset_most_recent_wider_sids <- dataset_most_recent_wider %>% 
+  filter(sids_context == "sids")
+```
+
+
+Select only the numeric columns
+
+```{r}
+dataset_most_recent_wider_sids_numeric <- dataset_most_recent_wider_sids %>% 
+  select(-ISO3, -Name, -year, -sids_context, -innovation)
+```
+
+
+```{r}
+cor_matrix_sids <- cor(dataset_most_recent_wider_sids_numeric, use = "pairwise.complete.obs")
+```
+
+
+
+```{r}
+corrplot_sids <- ggcorrplot(cor_matrix_sids, type = "lower", outline.color = "white") +
+  theme(axis.text.x = element_text(size = 3),
+        axis.text.y = element_text(size = 3))
+
+corrplot_sids
+```
+
+```{r}
+ggplotly(corrplot_sids)
+```
+

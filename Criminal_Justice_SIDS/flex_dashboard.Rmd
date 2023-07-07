@@ -1,0 +1,91 @@
+---
+title: "SIDS Global Organized Crime Index"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    social: menu
+    source_code: embed
+    theme: paper
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+# load data in 'global' chunk so it can be shared by all users of the dashboard
+library(ggplot2)
+# library(mgcv)
+library(shiny)
+library(flexdashboard)
+library(tidyverse)
+library(here)
+library(plotly)
+library(ggiraph)
+library(rsconnect)
+library(janitor)
+options(scipen = 99)
+
+
+```
+
+
+
+```{r}
+oc_index <- read_csv(here("Criminal_Justice_SIDS/data/global_oc_index_2021_sids_category.csv"))
+```
+
+
+
+
+```{r}
+dataset <- oc_index
+```
+
+```{r}
+dataset <- dataset %>% 
+  clean_names()
+```
+
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+checkboxInput('smooth', 'Smooth', value = FALSE)
+
+selectInput('x', 'X', names(dataset))
+selectInput('y', 'Y', names(dataset), names(dataset)[[2]])
+selectInput('color', 'Color', c('None', names(dataset)))
+
+selectInput('facet_row', 'Facet Row',
+c(None='.', names(dataset)))
+selectInput('facet_col', 'Facet Column',
+c(None='.', names(dataset)))
+```
+
+Outputs
+-----------------------------------------------------------------------
+
+### Data
+
+```{r}
+
+
+renderPlotly({
+  my_gg <- ggplot(data = dataset, aes_string(x=input$x, y=input$y, label = "country")) + geom_point()
+  
+
+ 
+  if (input$color != 'None')
+    my_gg <- my_gg + aes_string(color=input$color)
+
+  facets <- paste(input$facet_row, '~', input$facet_col)
+  if (facets != '. ~ .')
+    my_gg <- my_gg + facet_grid(facets)
+
+  if (input$smooth)
+    my_gg <- my_gg + geom_smooth()
+
+   print(my_gg)
+})
+
+
+```

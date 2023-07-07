@@ -1,0 +1,208 @@
+---
+title: "ND GAIN Data Exploration"
+author: "Connor"
+date: "6/13/2023"
+output: html_document
+---
+
+Load Libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)# allows us to cut out long file paths (ex. "users/connor/dowloads/etc")
+library(tidyverse) # allows us to do lots of fundamental data science tasks (ex. read_csv)
+library(ggcorrplot) # allows us to make correlation plots
+library(plotly) # allows us to make ggplot objects interactive
+library(ggpubr) # stat_cor for correlation coefficients
+```
+
+Read in Data
+
+[ND-GAIN Country Index](https://gain.nd.edu/our-work/country-index/)
+
+The ND-GAIN Country Index summarizes a country's vulnerability to climate change and other global challenges in combination with its readiness to improve resilience. It aims to help governments, businesses and communities better prioritize investments for a more efficient response to the immediate global challenges ahead.
+
+```{r} 
+nd_gain_data <- read_csv(here("SIDS_Data_Platform_ND-GAIN/data/nd-gain-joined.csv"))
+
+```
+
+
+Round value column for two numbers after the decimal
+
+```{r}
+nd_gain_data$value <- round(nd_gain_data$value, digits = 2)
+```
+
+
+**Challenge**
+
+The dataset is slightly flawed because if a value is not measured one year, it simply gets carried over from the previous year
+
+So simply think of filtering for the year 2020 as using the most recent year of available data (warning: this can lead to 20 year old data being visualized)
+
+
+```{r}
+nd_gain_most_recent <- nd_gain_data %>% 
+  filter(year == 2020)
+```
+
+Shift dataframe so that each value in the indicator column becomes it's own column 
+ - This gives us 190 rows (one country per row) with 48 indicators
+
+```{r}
+nd_gain_most_recent_wider <- nd_gain_most_recent %>% 
+  pivot_wider(names_from = indicator,
+              values_from = value)
+```
+
+Now our data is ready to visualize!
+
+Here are a few interesting plots created by our SPICE 2023 Summer Students funded by the Pacific Intelligence and Innovation Initiative (P3I)
+
+
+1. Histogram
+
+This code chunk below creates a histogram that shows the distribution of dependency on external resource for health services across 190 countries colored by whether the country is Small Island Developing State (SIDS) or not
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = dependency_on_external_resource_for_health_services,
+                                     fill = sids_context
+                                     )) +
+  geom_histogram(bins = 65, color = "black") +
+  theme_minimal()
+```
+
+
+
+2. Scatter Plots
+
+Create a scatter plot with education on the x axis and the human development index on the y axis
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index)) +
+  geom_point() +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+
+
+```
+Now add a trend line with geom_smooth() and a p value and correlation coefficient with stat_cor()
+
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+```
+
+Now split the plot into two for Small Island Developing States (SIDS) and non-SIDS 
+ - Warning -> Be cautious of using trend lines, p-values, and correlation coefficients with <30 data points (in this case countries)
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  facet_wrap(~sids_context) +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+```
+Now add color indicating GDP
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index,
+                                     color = rural_population)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  facet_wrap(~sids_context) +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+```
+
+Lastly, make the plot interactive, adding label = Name so we can see which point is which country by hovering, and by naming it and inputting it into ggplotly()
+
+
+```{r}
+education_hdi_gdp_plot <- ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index,
+                                     color = rural_population,
+                                     label = Name)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n', label.x = 20) +
+  facet_wrap(~sids_context) +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+
+ggplotly(education_hdi_gdp_plot)
+```
+
+
+3. Interactive Scatter Plot without Trend Lines
+- Sometimes, we don't intend to show a trend with a scatter plot
+
+
+Use a scatter plot to display projected change of sea level rise and engagement in international environmental conventions, color by SIDS or non-SIDS
+
+
+```{r}
+engagement_impacts_plot <- ggplot(data = nd_gain_most_recent_wider, aes(x = engagement_in_international_environmental_conventions, 
+                                             y = projected_change_of_sea_level_rise_impacts, 
+                                             color = sids_context)) +
+  geom_point() +
+  labs(title = "Projected Change of Sea level Rise Impacts / Engagement in International Environmental Conventions",
+       subtitle = "ND-GAIN Data",
+       x = "engagement in international environmental conventions",
+       y = "projected change of sea level rise impacts") +
+  theme_minimal()
+
+ggplotly(engagement_impacts_plot)
+```
+
+
+
+4. Subset Data and Create a Bar Chart
+
+Subset Data for only SIDS
+
+```{r}
+nd_gain_most_recent_wider_sids <- nd_gain_most_recent_wider %>% 
+  filter(sids_context == "sids")
+```
+
+Create Bar Chart showing Food Import Dependency in SIDS 
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider_sids, aes(x = food_import_dependency, 
+                                                  y = reorder(Name,food_import_dependency))) + 
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  labs(title = "Food Import Dependency, SIDS",
+       x = "proportion of cereal consumption obtained from imports",
+       y = "")+
+  theme_minimal() 
+  
+```
+
+
+
+
+
