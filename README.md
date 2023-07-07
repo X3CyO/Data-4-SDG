@@ -13,7 +13,7 @@ Each of these project themes has it's own folder in this repository that contain
 
 
 
-### Monitoring Global Aid - Focus: Small Island Developing States (SIDS)
+## Theme 1. Monitoring Global Aid - Focus: Small Island Developing States (SIDS)
 
 <img src="SpiceLogo1.png" width="240" /> <img src="cifal_logo.png" width="200" />
 
@@ -42,7 +42,7 @@ Final results are displayed and described in this R Publication: [SIDS-Focused A
 [Connor Flynn](https://github.com/ConnorFlynn)
 
 
-### Criminal Justice in SIDS
+## Theme 2. Criminal Justice in SIDS
 
 <img src="SpiceLogo1.png" width="240" /> <img src="cifal_logo.png" width="200" />
 
