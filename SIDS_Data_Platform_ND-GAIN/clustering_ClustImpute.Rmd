@@ -135,7 +135,7 @@ normalized_nd_gain <- predict(process, as.data.frame(nd_gain_data_Clust_Impute))
 Histograms
 
 ```{r}
-hist.data.frame(normalized_nd_gain)
+#hist.data.frame(normalized_nd_gain)
 
 ```
 
@@ -192,6 +192,6 @@ names(nd_gain_data_Clust_Impute_clusters)[names(nd_gain_data_Clust_Impute_cluste
 Write this as it's own csv file so it can be joined with the main ND-GAIN data
 
 ```{r}
-# write_csv(nd_gain_data_Clust_Impute_clusters, here("SIDS_Data_Platform_ND-GAIN/data/two_cluster_data.csv"))
+ write_csv(nd_gain_data_Clust_Impute_clusters, here("SIDS_Data_Platform_ND-GAIN/data/two_cluster_data.csv"))
 ```
 
