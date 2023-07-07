@@ -120,7 +120,7 @@ ggplot(data = nd_gain_most_recent_wider, aes(x = education,
        y = "human development index") +
   theme_minimal()
 ```
-Now add color indicating GDP
+Now add color indicating rural population
 
 ```{r}
 ggplot(data = nd_gain_most_recent_wider, aes(x = education,
@@ -167,7 +167,8 @@ Use a scatter plot to display projected change of sea level rise and engagement 
 ```{r}
 engagement_impacts_plot <- ggplot(data = nd_gain_most_recent_wider, aes(x = engagement_in_international_environmental_conventions, 
                                              y = projected_change_of_sea_level_rise_impacts, 
-                                             color = sids_context)) +
+                                             color = sids_context,
+                                             label = Name)) +
   geom_point() +
   labs(title = "Projected Change of Sea level Rise Impacts / Engagement in International Environmental Conventions",
        subtitle = "ND-GAIN Data",
