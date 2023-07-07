@@ -66,6 +66,15 @@ We accessed the [UNODC Status of Country Data Submissions by Data Collection Cam
 
 All code and data for the final analyses can be founf in the *r_publication.Rmd*
 
+**Students**
+
+[Andrew Nishitomi](https://github.com/anishitomi)
+
+
+
+**Mentor**
+
+[Connor Flynn](https://github.com/ConnorFlynn)
 
 ## Theme 3. Maunalua Fishpond Heritage Center Dashboard
 
@@ -86,8 +95,20 @@ The primary research goal is to develop a Dashboard that displays pH, oxygen, co
 
 [Beta Dashboard](https://connorflynn.shinyapps.io/maunalua-fishpond-heritage-center/?_ga=2.191367721.2028241035.1678747718-1779377801.1678413849#section-kalauhaihai)
 
+**Students**
+
+[Anson Ekau](https://github.com/aekau21)
+
+[Hina Ioane](https://github.com/Hinaioane)
+
+**Mentor**
+
+[Connor Flynn](https://github.com/ConnorFlynn)
+
 
 ## Theme 4. Mapping Tutorial for the United States - Affiliated Pacific Islands (USAPI)
+
+<img src="logos/SpiceLogo1.png" width="240" /> <img src="logos/cifal_logo.png" width="200" />
 
 **About**
 
@@ -98,8 +119,6 @@ The USAPI are populated by more than 500,000 inhabitants who live on hundreds of
 **Goal of this Work**
 
 
-<img src="logos/SpiceLogo1.png" width="240" /> <img src="logos/cifal_logo.png" width="200" />
-
 Utlize the urbnmapr package to create choropleth maps of the US that include Guam, American Samoa, and the Commonwealth of the Northern Mariana Islands
 
 The urbnmapr package is a good start but does not include:
@@ -108,7 +127,7 @@ The urbnmapr package is a good start but does not include:
 - Federated States of Micronesia (FSM)
 
 Next steps include:
-- Shifting and Enlarging the geometries of the USAPI to be include on a standard US choropleth map
+- Shifting and Enlarging the geometries of the USAPI to be included on a standard US choropleth map
 
 
 
