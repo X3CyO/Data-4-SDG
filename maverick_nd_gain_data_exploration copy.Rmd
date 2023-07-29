@@ -1,0 +1,1298 @@
+---
+title: "Dollar Impact using ESG in SIDS"
+author: "Maverick"
+date: "7/17/2023"
+output: html_document
+Note: I think it could be feasible if I pull this off to create an ETF of sorts that allows the average person to invest in this index and help these SIDS nations through Kiva indirectly, and we'd be able to benefit from large numbers impacting these nations in a positive way while also providing some sort of compounding return to be reinvested into the next nation in need, etc.
+---
+Load Libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)# allows us to cut out long file paths (ex. "users/connor/dowloads/etc")
+library(tidyverse) # allows us to do lots of fundamental data science tasks (ex. read_csv)
+library(ggcorrplot) # allows us to make correlation plots
+library(plotly) # allows us to make ggplot objects interactive
+library(ggpubr) # stat_cor for correlation coefficients
+
+#stuff I added
+library(corrplot)
+library(gridExtra)
+library(dplyr)
+library(ggplot2)
+library(rpart)
+library(magrittr)
+library(rvest)
+library(httr)
+library(jsonlite)
+library(rnaturalearth)
+library(leaflet)
+library(sf)
+library(geojsonio)
+```
+
+Read in Data
+
+[ND-GAIN Country Index](https://gain.nd.edu/our-work/country-index/)
+
+The ND-GAIN Country Index summarizes a country's vulnerability to climate change and other global challenges in combination with its readiness to improve resilience. It aims to help governments, businesses and communities better prioritize investments for a more efficient response to the immediate global challenges ahead.
+
+```{r} 
+nd_gain_data <- read_csv("/Users/Mav/Desktop/Data-4-SDG/SIDS_Data_Platform_ND-GAIN/data/nd-gain-joined.csv")
+
+```
+
+
+Round value column for two numbers after the decimal
+
+```{r}
+nd_gain_data$value <- round(nd_gain_data$value, digits = 2)
+```
+
+
+**Challenge**
+
+The dataset is slightly flawed because if a value is not measured one year, it simply gets carried over from the previous year
+
+
+```{r}
+nd_gain_most_recent <- nd_gain_data
+```
+In order to ensure the data is reliable to use, I'm going to fill NaN's with the difference between the years wherein there are values to smooth out the curves. If there is no data, I'm going to keep it as NaN. This will allow for things like the matrix to work properly.
+
+Shift dataframe so that each value in the indicator column becomes it's own column 
+ - This gives us 190 rows (one country per row) with 48 indicators
+
+```{r}
+
+nd_gain_most_recent_wider <- nd_gain_most_recent %>% 
+  pivot_wider(names_from = indicator,
+              values_from = value)
+
+nd_gain_most_recent_wider <- nd_gain_most_recent_wider %>%
+  mutate(across(c(slum_population, age_dependency_ratio), ~ -abs(.)),
+         age_dependency_ratio = age_dependency_ratio * 100) # need to adjust the scale since the highest value is 1; not 100 for this one.
+
+# Fill missing data with the year before's data to clean up some N/A
+nd_gain_most_recent_wider <- nd_gain_most_recent_wider %>%
+  group_by(Name) %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), . - lag(.), .))) %>%
+  ungroup()
+
+print(nd_gain_most_recent_wider)
+
+
+```
+
+
+
+
+Overview
+This project is going to look at different SID's in relation to others which will then be compared to Kiva data to help develop a ticker to help people determine who needs the most financial help. Education, GDP, human development, and doing business are the best indicators to take a look at in relation to this. We will use Singapore as a benchmark which other SID's can hold themselves accountable to, and try to re-balance accordingly based on impact to make them similar. According to the data, it is no longer and SIDS, but since it was, I'll add it back into the other dataset
+
+I. Investigate high correlations w/human development in sids vs non
+A.1 Divide sids vs non-sids
+```{r}
+# Modify 'sids_context' of Singapore to "sids"
+nd_gain_most_recent_wider <- nd_gain_most_recent_wider %>%
+  mutate(sids_context = if_else(Name == "Singapore", "sids", sids_context))
+
+# Filter 'nd_gain_sids' and 'nd_gain_not_sids'
+nd_gain_sids <- nd_gain_most_recent_wider %>% filter(sids_context == "sids")
+nd_gain_not_sids <- nd_gain_most_recent_wider %>% filter(sids_context == "non-sids")
+
+```
+
+2 filter out columns w/ too much blanks that'd mess with matrix
+```{r} 
+# Calculate the number of missing values (NAs) in each column of nd_gain_numeric_sids
+missing_data_counts <- colSums(is.na(nd_gain_sids))
+
+# Sort the counts in descending order
+sorted_missing_data_counts <- sort(missing_data_counts, decreasing = TRUE)
+
+# Print the results
+print(sorted_missing_data_counts)
+```
+
+3 filter out the non-numerics & "extra" columns
+```{r} 
+nd_gain_numeric_sids <- nd_gain_sids %>% 
+  select(-ISO3, -Name, -year, -sids_context, -dependency_on_imported_energy, -projected_change_of_annual_runoff, -paved_roads,-projected_change_of_annual_groundwater_recharge, -projected_change_of_sea_level_rise_impacts, -population_living_under_5m_above_sea_level) # *need to get rid of blank columns we deem non-relevant sadly to best run the correlation matrix; copying that to the other set too. random sampling?? told to try bootstrap
+
+nd_gain_numeric_not_sids <- nd_gain_not_sids %>% 
+  select(-ISO3, -Name, -year, -sids_context, -dependency_on_imported_energy, -projected_change_of_annual_runoff, -paved_roads,-projected_change_of_annual_groundwater_recharge, -projected_change_of_sea_level_rise_impacts, -population_living_under_5m_above_sea_level)
+```
+
+B.1 set matrices
+```{r}
+# Calculate correlation matrix
+cor_matrix_sids <- cor(nd_gain_numeric_sids, use = "pairwise.complete.obs")
+
+# the non-sids is a lot simpler. Should I random sample it too to be non-biased?
+cor_matrix_not_sids <- cor(nd_gain_numeric_not_sids[complete.cases(nd_gain_numeric_not_sids), ], use = "pairwise.complete.obs")
+```
+
+2 Create Matricies
+```{r}
+corrplot_sids <- ggcorrplot(cor_matrix_sids, type = "lower", outline.color = "black") +
+  theme(axis.text.x = element_text(size = 3),
+        axis.text.y = element_text(size = 3)) 
+
+corrplot_not_sids <- ggcorrplot(cor_matrix_not_sids, type = "lower", outline.color = "black") +
+  theme(axis.text.x = element_text(size = 3),
+        axis.text.y = element_text(size = 3)) 
+```
+3 Apply interactivity to both (sids first then not-sids second)
+```{r}
+ggplotly(corrplot_sids)
+ggplotly(corrplot_not_sids)
+```
+all these numbers are >= |.7|
+
+not-sids:
+high corr: reliable drinking water, protected biome, sanitation, electricity access, gdp, education, urban concentration, trade&transport infrastructure, regulatory quality, rule of law, control of corruption, medical staff, political stability/non-violence, engagement in environmental conventions
+low corr: slum population, child_malnutrition, rural population, natural capital dependency, age dependency ratio, dependency on external resources for health
+* I went back, and based on this information, tried to remove blank data for sids so that the matrix didnt have to randomly be sampled.
+
+sids:
+high corr: Electricity access, Sanitation, Drinking water, Protected biome, gdp, disaster preparedness
+low corr: Age dependency, slum population, hydropower generation
+
+The overlap:
+high corr: Electricity access, sanitation, drinking water, gdp
+low corr: Age dependency ratio, slum population
+
+Now we look at singapore to determine if it will make an ideal guidemarker for progress in the SIDS.
+
+II. Find a Benchmark
+A. 1 Visualize Singapore's growth as the benchmark (multi-plot?)
+```{r} 
+singapore <- nd_gain_most_recent_wider %>% filter(Name == "Singapore")
+# Create the first plot for Singapore
+plot_singapore <- ggplot(data = singapore, aes(x = year, y = human_development_index)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  labs(title = "Human Development Index in Singapore",
+       x = "year",
+       y = "human development index") +
+  theme_minimal() + expand_limits(y=0) # this fixes the growth to appear more like the total
+```
+2 Visualize Other nations growth
+```{r} 
+# Create the second plot for sids 
+plot_sids <- ggplot(data = nd_gain_sids, aes(x = year, y = human_development_index)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  labs(title = "Human Development Index in Other SIDS",
+       x = "year",
+       y = "human development index") +
+  theme_minimal()
+
+# Create the second plot for sids 
+plot_not_sids <- ggplot(data = nd_gain_not_sids, aes(x = year, y = human_development_index)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  labs(title = "Human Development Index in not SIDS",
+       x = "year",
+       y = "human development index") +
+  theme_minimal()
+```
+3 visually compare Singapore to the total spread of data over time
+* need to modify this code to fit
+```{r} 
+# Display the two plots side by side
+grid.arrange(plot_singapore, plot_sids, plot_not_sids, ncol = 3)
+
+```
+Overall we can confirm that Singapore is in the upper range of human development Sids or not, and has been up to 1995 according to cutoff of our data. This is promising. The peak is .94
+
+B. 1 Look at general distribution of the total data for context (histogram)
+```{r}
+plot_others_hist <- ggplot(data = nd_gain_sids, aes(x = human_development_index)) +
+  geom_histogram(binwidth = 0.025, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Human Development Index in SIDS",
+       x = "human development index",
+       y = "Frequency") +
+  theme_minimal() +
+ scale_x_continuous(breaks = seq(0, 1, by = 0.1))  +
+                      scale_y_continuous(breaks = seq(0, 150, by = 10))  # Set the breaks to increase frequency 
+plot_others_hist
+```
+Based on this image of the SIDS in total, we can see that singapore's average performance is not only at the top, but peak, is at the very top.
+
+C.1 I want to also cross check singapore's correlation index in relation to human development to see what the sensitivity is.
+```{r}
+# Select numeric columns for correlation calculation
+nd_gain_numeric_singapore <- singapore %>% 
+  select(-ISO3, -Name, -year, -sids_context, -dependency_on_imported_energy, -projected_change_of_annual_runoff, -paved_roads,-projected_change_of_annual_groundwater_recharge, -projected_change_of_sea_level_rise_impacts, -population_living_under_5m_above_sea_level) # copied the same context as used prior
+
+# Calculate correlation matrix
+cor_matrix_singapore <- cor(nd_gain_numeric_singapore, use = "pairwise.complete.obs")
+
+# Create the correlation plot using ggcorrplot
+corrplot_singapore <- ggcorrplot(cor_matrix_singapore, type = "lower", outline.color = "black") +
+  theme(axis.text.x = element_text(size = 6),
+        axis.text.y = element_text(size = 6))
+
+# Convert the ggcorrplot to interactive plot using ggplotly
+ggplotly(corrplot_singapore)
+
+```
+Again; > |.7|:
+
+high corr: population, gdp, ict, rule of law, doing business, medical staff, political stability, eco footprint
+low corr: dam capacity, freshwater withdrawal, protected biome, age dependency ratio
+
+Sadly Singapore lacks correlary data regarding fresh water, electricity access amongst many other things we want to look at which skews this data. This is because when a dataframe category has all of the data in that category with the same value, there is no change, and thus, no sensitivity to be found between two compared metrics. the slum population of singapore is n/a across the board. This could mean very little, or that they are hiding the actual amount, or it wasnt tracked for whatever reason. Reading literature online about the topic paints a very clear picture: Strong public housing policies, and programs that allow low income people to purchase home leases for up to 99 years. https://eresources.nlb.gov.sg/history/events/2ab696d3-d9f5-4970-9108-e0f95919cc98#:~:text=The%20Home%20Ownership%20for%20the,apartments%20built%20by%20the%20HDB.
+"Prime Minister Lee Kuan Yew rationalised that a high homeownership rate would lend social and political stability to Singapore.[4] He was convinced that if every family owned its home, the country would be more stable.[5]"
+
+If this is true, then although we have no data, I could possibly make the assumption that the correlation is high regardless of the actual numbers because there is direct policy and action to prevent the formation of slums.
+
+other Constant values to consider:
+Electricity = 100
+Sanitation = 100
+
+*If we were to look at the data indirectly however, wherein freshwater was a high correlation, and in this dataset, we have a low correlation for its withdrawal, we could make an assumption that the opposite is also true: fresh water is indirectly a high correlation?
+
+#recap
+sids vs non-sids overlap:
+high corr: Electricity access, sanitation, drinking water, gdp
+low corr: Age dependency ratio, slum population
+#end recap
+
+So far: If we're to compare this to what had overlapped directly between sids and non-sids above, we can see further overlap only between the following:
+
+Direct overlap:
+high corr: gdp
+low corr: Age dependency ratio
+
+But if we were to add in the other data based on our assumptions and best guesses, we can see that there is total overlap oncemore in these key metrics:
+
+Indirect Overlap between sids, non-sids, and singapore:
+high corr: drinking water, electricity, sanitation, gdp
+low corr: Age dependency ratio, slums
+
+as an artificial benchmark then, we will add the following to singapore to be used as intended as a benchmark: slums = 0, fresh_water = 100.
+
+D.1 Fill in the N/a
+```{r}
+singapore <- singapore %>%
+  mutate(
+    access_to_reliable_drinking_water = replace(access_to_reliable_drinking_water, is.na(access_to_reliable_drinking_water), 100),
+    slum_population = replace(slum_population, is.na(slum_population), 0)
+  )
+print(singapore)
+
+```
+*
+
+III. The actual thing
+A.1 Isolate the individual overlapping characteristics and average the years to gain the general "heartbeat" metric. We can now remove the human development index outright since we've defined the major trends aligned with it. GDP will always be improved if we improve the other metrics through donations to businesses that impact these main factors, so that will also be removed.
+
+```{r}
+categories_to_isolate <- c("Name","year", "access_to_reliable_drinking_water", "electricity_access", "access_to_improved_sanitation_facilities", "age_dependency_ratio","slum_population")
+
+#isolate
+singapore_overlap <- singapore %>%
+  select(all_of(categories_to_isolate))
+
+nd_gain_overlap_sids <- nd_gain_sids %>% 
+  select(all_of(categories_to_isolate))
+
+#average the years
+averaged_singapore <- singapore_overlap %>%
+  group_by(Name) %>%
+  summarize(across(where(is.numeric), mean, na.rm = TRUE))
+
+averaged_nd_gain_sids <- nd_gain_overlap_sids %>%
+  group_by(Name) %>%
+  summarize(across(where(is.numeric), mean, na.rm = TRUE))
+
+#drop the year column
+averaged_singapore <- averaged_singapore %>% 
+  select(all_of(categories_to_isolate),-year)
+
+averaged_nd_gain_sids <- averaged_nd_gain_sids %>% 
+  select(all_of(categories_to_isolate),-year)
+```
+
+2 I need to deal with empty values again...
+perhaps we should consider them to be 0 because if we cannot measure the most important metrics, perhaps they need the most money to begin even tracking? when new data appears, then someone could just re-evaluate the set to be just the new data as the average.
+
+* I just noticed that singapore is not in the averaged_nd_gain_sids dataset for some reason. May need to consider adding it back in to properly weight? I would've removed it now rather than earlier in the process to isolate.
+
+
+3 Im gonna make a correlation plot just to inspect what we have now
+```{r}
+averaged_numeric_nd_gain_sids <- averaged_nd_gain_sids %>% 
+  select(-Name)
+
+# Select numeric columns (excluding "Name" column)
+numeric_columns <- averaged_nd_gain_sids %>%
+  select_if(is.numeric)
+
+# Turn positive values into negative for specific columns
+needs_numeric_sids <- numeric_columns %>%
+  mutate(across(c(slum_population, age_dependency_ratio), ~ -abs(.)))
+
+# Calculate correlation matrix
+cor_matrix_average_sids <- cor(needs_numeric_sids, use = "pairwise.complete.obs")
+
+corrplot_average_sids <- ggcorrplot(cor_matrix_average_sids, type = "lower", outline.color = "black") +
+  theme(axis.text.x = element_text(size = 9),
+        axis.text.y = element_text(size = 9)) 
+
+ggplotly(corrplot_average_sids)
+
+```
+It's interesting to see their interrelation a bit better up close. Perhaps this insinuates that fixing one partially fixes another.. perhaps this is how I'll develop the impact index. Whatever has the most intense correlations in the proper directions is the best to improve, and so on.
+
+B.1 
+```{r}
+# Sum the values for each category (column)
+sum_per_category <- colSums(cor_matrix_average_sids, na.rm = TRUE)
+
+# Divide the sums by the total number of categories
+impact_index <- sum_per_category / 5
+
+```
+
+the order of importance is drinking water, age dependency,sanitation, slum,electricity, 
+
+Now we just have to decide how this impact index will impact our sensitivities. Do we use the values generated to be the metric of impact? or do I have to derive them another way? We dont have impact per dollar yet per say; just what needs the most attention on average until we have more data properly collected.
+
+2 Now just repeat what I did for the impact index to determine a need index for the individual nations: take all the categories that are not the name, add the absolute value of them together, and then divide them by the number of those columns.
+
+```{r}
+# *Fill remaining missing Positive categories with 0, and Negative categories with 100 to fill for N/A (the minimum of each)
+# Positive is electricity_access, access_to_improved_sanitation_facilities, access_to_reliable_drinking_water. Negative are age_dependency_ratio, and slum_population
+averaged_nd_gain_sids <- averaged_nd_gain_sids %>%
+  mutate(
+    access_to_reliable_drinking_water = ifelse(is.na(access_to_reliable_drinking_water), 0, access_to_reliable_drinking_water),
+    electricity_access = ifelse(is.na(electricity_access), 0, electricity_access),
+    access_to_improved_sanitation_facilities = ifelse(is.na(access_to_improved_sanitation_facilities), 0, access_to_improved_sanitation_facilities),
+    age_dependency_ratio = ifelse(is.na(age_dependency_ratio), -100, age_dependency_ratio),
+    slum_population = ifelse(is.na(slum_population), -100, slum_population)
+  )
+
+#and for needs_numeric_sids
+
+needs_numeric_sids <- needs_numeric_sids %>%
+  mutate(
+    access_to_reliable_drinking_water = ifelse(is.na(access_to_reliable_drinking_water), 0, access_to_reliable_drinking_water),
+    electricity_access = ifelse(is.na(electricity_access), 0, electricity_access),
+    access_to_improved_sanitation_facilities = ifelse(is.na(access_to_improved_sanitation_facilities), 0, access_to_improved_sanitation_facilities),
+    age_dependency_ratio = ifelse(is.na(age_dependency_ratio), -100, age_dependency_ratio),
+    slum_population = ifelse(is.na(slum_population), -100, slum_population)
+  )
+
+#then sum
+sum_per_row <- rowSums(needs_numeric_sids)
+
+# Divide by the sum of columns (which doesnt contain the "Name" column)
+proportions_per_row <- sum_per_row / sum(colSums(needs_numeric_sids))
+
+# Create a new dataframe with the Needs and the "Name" column
+needs_index <- data.frame(Name = averaged_nd_gain_sids$Name, needs = proportions_per_row)
+
+# Change the needs so that its a positive number indicating need
+needs_index$needs <- needs_index$needs
+
+# Ensure it's in desc order: the lower the score, the higher the need
+needs_index <- needs_index %>%
+  arrange(needs)
+
+needs_index
+```
+
+
+C.1. Who needs the most help
+needs_index, impact_index... lets just view things first
+
+```{r}
+#need to reorder because theres been an issue w/ the ordering not going through from the above function?
+needs_index$Name <- reorder(needs_index$Name, -needs_index$needs)
+
+#plot
+needs_plot <- ggplot(data = needs_index, aes(x = needs, y = Name)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep = '\n') +
+  labs(title = "SIDS Nations in most relative need", x = "Severity of Need", y = "Name") +
+  theme_minimal()
+
+
+needs_plot
+```
+The higher the number, the more severe the need
+
+2 How to help (arrange by the names based on needs_index)
+```{r}
+# Reorder 'Name' based on the 'needs' column in the needs_index dataframe
+needs_index$Name <- reorder(needs_index$Name, -needs_index$needs)
+
+# Reorder the rows of the averaged_nd_gain_sids dataframe based on the order of 'Name' in needs_index
+averaged_nd_gain_sids <- averaged_nd_gain_sids[order(match(averaged_nd_gain_sids$Name, needs_index$Name)), ]
+
+# Print the reordered averaged_nd_gain_sids dataframe
+print(averaged_nd_gain_sids)
+
+```
+3 How to best help (arrange categories by the impact_index's order)
+
+```{r}
+# Reorder Names based on the order in needs_index dataframe
+averaged_nd_gain_sids$Name <- reorder(averaged_nd_gain_sids$Name, -needs_index$needs)
+
+# Convert impact_index to a data frame
+impact_index <- as.data.frame(impact_index)
+
+# Arrange Impact based on column in descending order
+impact_index <- impact_index %>%
+  arrange(desc(impact_index))
+
+# Transpose the data frame to swap index with columns and handle duplicate columns
+impact_index_pivot <- as.data.frame(t(impact_index))
+
+# Extract the ordered column names from the row names of impact_index
+desired_column_order <- rownames(impact_index)
+
+# Reorder the columns based on desired_column_order
+averaged_nd_gain_sids <- averaged_nd_gain_sids %>%
+  select(Name, all_of(desired_column_order))
+
+# Print the reordered averaged_nd_gain_sids dataframe
+print(averaged_nd_gain_sids)
+
+```
+* I have an extra age_dependency_ratio. must have merged improperly at some point?
+
+D. 1.Add back years & reformat the original dataframe for sids using our newfound knowledge
+```{r}
+#re-organize the original dataframe
+nd_gain_sids_organized <- nd_gain_sids %>% 
+  select(gross_domestic_product, human_development_index, Name, year, desired_column_order)
+
+# Create a unique list of "Name" in averaged_nd_gain_sids with the desired order
+unique_names <- unique(averaged_nd_gain_sids$Name)
+
+# Get the order of "Name" in nd_gain_sids_organized based on the unique_names order
+name_order <- match(nd_gain_sids_organized$Name, unique_names)
+
+# Reorder the "Name" column in nd_gain_sids_organized based on the order of unique_names
+nd_gain_sids_organized$Name <- factor(nd_gain_sids_organized$Name, levels = unique_names[order(name_order)])
+
+#refill the missing values for positive categories w/ 0, and negative w/ -100 again.
+nd_gain_sids_organized <- nd_gain_sids_organized %>%
+  mutate(
+    access_to_reliable_drinking_water = ifelse(is.na(access_to_reliable_drinking_water), 0, access_to_reliable_drinking_water),
+    electricity_access = ifelse(is.na(electricity_access), 0, electricity_access),
+    access_to_improved_sanitation_facilities = ifelse(is.na(access_to_improved_sanitation_facilities), 0, access_to_improved_sanitation_facilities),
+    age_dependency_ratio = ifelse(is.na(age_dependency_ratio), -100, age_dependency_ratio),
+    slum_population = ifelse(is.na(slum_population), -100, slum_population)
+  )
+
+nd_gain_sids_organized
+
+```
+2 join
+
+```{r}
+nd_gain_sids_organized <- left_join(nd_gain_sids_organized, needs_index, by = "Name")
+```
+
+3 visualize v1 macro plot
+```{r} 
+plot_1 <- ggplot(data = nd_gain_sids_organized, aes(x = year, y = human_development_index, color = needs, label = Name)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep = '\n', label.x = 20) +
+  labs(title = "Yearly Needs",
+       x = "Year",
+       y = "Human Development Index") +
+  theme_minimal() +
+scale_x_continuous(limits = c(2000, 2020))  # Set the lower limit of the x-axis to 2000
+
+ggplotly(plot_1)
+```
+needs being constant is consistent because as data is added then the general need will decrease. This is a rudimentary solution compared to picking actual weights and calculating things across the board.
+
+Using this plot, we can see a different picture of what we originally saw just with the two dimensional needs plot. As such, we shall use this as our way of knowing not only who needs the most help, but who is doing the best under the worst conditions due to a factor like maybe a lower population, or higher income, etc. If I had to take a guess, its because those above the trend line are vacation spots: places where the GDP is itself low, but the quality is high because people bring money to the location.
+
+.6 to .67 is the amount the trend line has changed. Perhaps we can say any below this line are clusters that need the most help, and those above them have some sort of unique advantage that compensates for their lack of particular resources, meaning they would need the least support to change the most? So the order we see above is the actual order to donate in rather than one or the other. (excluding tuvalu?)
+
+*Perhaps we will use this as an averaging tool to compensate for the lack of data for some nations?? could multiply them together and take the average... but then the need's category would have a larger impact cause of their relative difference in scale? gonna try below
+
+4 just to look: Of course the general relationship of gdp to life quality is quite strong:
+```{r} 
+
+gdp_plot <- ggplot(data = nd_gain_sids_organized, aes(x = year, y = gross_domestic_product, color = human_development_index, label = Name)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep = '\n', label.x = 20) +
+  labs(title = "Logarithmic Relationship between Human Development Index and GDP (non-weighted)",
+       x = "Year",
+       y = "Gross Domestic Product (GDP)") +
+  theme_minimal() +
+  scale_color_continuous(trans = "log10") +
+scale_x_continuous(limits = c(2000, 2020))  # Set the lower limit of the x-axis to 2000
+
+ggplotly(gdp_plot)
+```
+In mathematics, the base 10 logarithm (log10) of a number "x" is the power to which 10 must be raised to obtain "x."
+log10(100) = 2, because 10^2 = 100. This is good for observing the relative relationship rather than the actual since Singapore, and Bahrain throw off the charts color distinction otherwise.
+
+5 human_needs on a yearly basis
+
+
+6 Final Metric
+```{r}
+# Multiply human_development_index with needs and divide by 2
+human_needs_sids <- nd_gain_sids_organized %>%
+  mutate(human_needs = human_development_index * needs / 2)
+
+# Merge with needs_index based on the 'Name' column
+human_needs_sids <- merge(human_needs_sids, needs_index, by = "Name")
+
+# Print the result
+print(human_needs_sids)
+
+```
+
+6 v2 macroplot
+```{r} 
+Macro_plot <- ggplot(data = human_needs_sids, aes(x = year, y = gross_domestic_product, color = human_needs, label = Name)) +
+  geom_point(size = 1) + #changed the size to be smaller for the final plot below
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep = '\n', label.x = 20) +
+  labs(title = "Yearly Needs",
+       x = "Year",
+       y = "GDP") +
+  theme_minimal() +
+scale_x_continuous(limits = c(2000, 2020))  # Set the lower limit of the x-axis to 2000
+
+ggplotly(Macro_plot)
+```
+Cool dynamic coloring was lost when I filled in the blank data with carried over averages from prior years to fill I think. Dont know whats more accurate. Still changes over time as the human_development_index does, weighted by the micro-economic weight of the needs_index.
+
+D. The big one
+
+1 Micro-Plots
+```{r}
+# Function to create the plot for a specific variable
+create_plot <- function(data, y_var, y_label) {
+  ggplot(data = data, aes(x = year, y = !!sym(y_var), color = human_needs, label = Name)) +
+    geom_point(size = .5) +  # Adjusted the size of the dots
+    geom_smooth() +
+    stat_cor(method = "pearson", output.type = "text", label.sep = '\n', label.x = 20) +
+    labs(title = paste(y_label, "Needs"),
+         x = "Year",
+         y = y_label) +
+    theme_minimal() +
+    scale_x_continuous(limits = c(2000, 2020))
+}
+
+# Create plots for each variable
+electricity_access_plot <- create_plot(human_needs_sids, "electricity_access", "Electricity access")
+access_to_reliable_drinking_water_plot <- create_plot(human_needs_sids, "access_to_reliable_drinking_water", "Access to Reliable Drinking Water")
+slum_population_plot <- create_plot(human_needs_sids, "slum_population", "Slum Population")
+access_to_improved_sanitation_facilities_plot <- create_plot(human_needs_sids, "access_to_improved_sanitation_facilities", "Access to Improved Sanitation Facilities")
+age_dependency_ratio_plot <- create_plot(human_needs_sids, "age_dependency_ratio", "Age Dependency Ratio")
+
+```
+
+2 put it all together
+```{r}
+# Combine all micro plots in a single interactive plot + the macro plot
+subplot(
+  Macro_plot,
+  electricity_access_plot,
+  access_to_reliable_drinking_water_plot,
+  access_to_improved_sanitation_facilities_plot,
+  slum_population_plot,
+  age_dependency_ratio_plot,
+  nrows = 2,  # Set the number of rows in the subplot grid
+  shareX = TRUE
+)
+
+```
+Darker color, lower number, less need. lighter color, higher number, more needs.
+ACTUAL
+
+the higher the human_needs, the higher the need. reminder: the human_needs index is the human_development_index multiplied by our needs_index, and divided by 2. This may perhaps smooth out the human development index for nations who lack that data, and smooth out the needs_index for nations who lack data for the different overlapping needs we'd established. *Outliers are filled to 0. This should be adjusted down the road.  Don't forget that the bottom right two plots are negative qualities.
+
+*Im going to use the GDP macro chart later on; not as the major picking factor necessarily for the automation, but its quite similar. 
+
+IV. Automation
+
+We have all the cool charts, and we can see what nations need the most help relative both to one another, but also their relative need over time, and how the main factors we've determined overlap with the strongest correlation and anti-correlation to the pre-established human development index and determined which order of importance is on average the most impactful to consider.
+
+Without having to look directly at each chart individually, how can we ensure that this process is done for us for the average person who just wants to help the country in the most need in a way that would produce the most impact? Using Supervised Machine Learning.
+
+A decision tree is something that we commonly use to make decisions, but is also available as a tool to automatically filter things so that they end up in the proper box. By using something like this we could use a logical picking process, and transform it into programming (which is technically all of programming already.. just a logical process instead)
+
+The process I'm using for picking is:
+1. Using the needs_index's needs category we can pick which nation needs the most help
+  a. Inspecting macro-economic (national) stability (*not sure how if this could play later alongside statistical default using Kiva)
+2. Then run through the graphs in the most important order and one's nation relative to the singapore benchmark (relative strength), and multiply that strength variance to some sort of interval that constitutes the correlation strength of the category?
+  a. Inspecting the relative difference from the mean of each value
+  b. Inspecting the micro-economic (industry) stability (*not sure how if this could play later alongside statistical default using Kiva)
+3. Select the variable with the highest impact
+
+*Disregarding outliers? where the y=0, regardless of human_need
+
+A. 1 Calculate difference between other Countries and Singapore
+```{r}
+# Filter the data
+singapore_data <- human_needs_sids %>%
+  filter(Name == "Singapore") %>%
+  select(year, "electricity_access","access_to_reliable_drinking_water","slum_population","access_to_improved_sanitation_facilities","age_dependency_ratio","gross_domestic_product", "human_development_index", "human_needs")
+
+library(dplyr)
+
+# Calculate the difference for each column compared to Singapore's values and create new columns with the difference in it.
+human_needs_sids <- human_needs_sids %>%
+  mutate(
+    diff_electricity_access = electricity_access - singapore_data$electricity_access,
+    diff_access_to_reliable_drinking_water = access_to_reliable_drinking_water - singapore_data$access_to_reliable_drinking_water,
+    diff_slum_population = slum_population - singapore_data$slum_population,
+    diff_access_to_improved_sanitation_facilities = access_to_improved_sanitation_facilities - singapore_data$access_to_improved_sanitation_facilities,
+    diff_age_dependency_ratio = age_dependency_ratio - singapore_data$age_dependency_ratio,
+    diff_gross_domestic_product = gross_domestic_product - singapore_data$gross_domestic_product,
+    diff_human_development_index = human_development_index - singapore_data$human_development_index,
+    diff_human_needs = human_needs - singapore_data$human_needs
+  ) %>%
+  # Fill NA values in the diff_ columns with the average across years
+  mutate_at(vars(starts_with("diff_")), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))
+
+```
+* diff needs_index.. diff human development index... diff human needs... what are the implications?? are they irrelevant? its a microeconomic sentiment within a single nation... why would anyone need these in particular
+* bias added: Fill NA with average across years if there's no data for that time..?
+
+2 Visualize.. again
+
+v2 macroplot
+```{r} 
+diff_Macro_plot <- ggplot(data = human_needs_sids, aes(x = year, y = diff_gross_domestic_product, color = human_needs, label = Name)) +
+  geom_point(size = 1) + #changed the size to be smaller for the final plot below
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep = '\n', label.x = 20) +
+  labs(title = "Yearly Needs Diff GDP",
+       x = "Year",
+       y = "GDP") +
+  theme_minimal() +
+scale_x_continuous(limits = c(2000, 2020))  # Set the lower limit of the x-axis to 2000
+
+ggplotly(diff_Macro_plot)
+```
+3
+Micro-Plots
+```{r}
+# Function to create the plot for a specific variable
+create_plot <- function(data, y_var, y_label) {
+  ggplot(data = data, aes(x = year, y = !!sym(y_var), color = human_needs, label = Name)) +
+    geom_point(size = .5) +  # Adjusted the size of the dots
+    geom_smooth() +
+    stat_cor(method = "pearson", output.type = "text", label.sep = '\n', label.x = 20) +
+    labs(title = paste(y_label, "Differences from Singapore"),
+         x = "Year",
+         y = y_label) +
+    theme_minimal() +
+    scale_x_continuous(limits = c(2000, 2020))
+}
+
+# Create plots for each variable
+diff_electricity_access_plot <- create_plot(human_needs_sids, "diff_electricity_access", "Electricity access")
+diff_access_to_reliable_drinking_water_plot <- create_plot(human_needs_sids, "diff_access_to_reliable_drinking_water", "Access to Reliable Drinking Water")
+diff_slum_population_plot <- create_plot(human_needs_sids, "diff_slum_population", "Slum Population")
+diff_access_to_improved_sanitation_facilities_plot <- create_plot(human_needs_sids, "diff_access_to_improved_sanitation_facilities", "Access to Improved Sanitation Facilities")
+diff_age_dependency_ratio_plot <- create_plot(human_needs_sids, "diff_age_dependency_ratio", "Age Dependency Ratio")
+
+
+```
+
+4 put it all together
+```{r}
+# Combine all micro plots in a single interactive plot + the macro plot
+subplot(
+  diff_Macro_plot,
+  diff_electricity_access_plot,
+  diff_access_to_reliable_drinking_water_plot,
+  diff_access_to_improved_sanitation_facilities_plot,
+  diff_slum_population_plot,
+  diff_age_dependency_ratio_plot,
+  nrows = 2,  # Set the number of rows in the subplot grid
+  shareX = TRUE
+)
+
+```
+*Not sure why the title and y axis are lost. I'm aiming to have mini titles for each so people can tell whats going on better.
+
+RELATIVE DIFFERENCE
+
+Looking at the differences, Singapore should now be 0 for all the graphs, and the difference between Singapore and the other nations are minused per year to provide performance relative to the benchmark Singapore.
+
+
+B.1 pre-designate importance of column order from prior code established
+
+```{r}
+# Add "diff_" to the beginning of each name in the list
+desired_column_order <- paste("diff_", desired_column_order, sep = "")
+desired_column_order
+
+```
+
+2 rebuild the impact index based on difference.....??????? maybe not worth the hassle like the weighting, based on the current time constraint...
+
+3 Using a filter directly instead of a decision tree.
+
+```{r}
+# Filter data for the year 2020 and replace NA values with 0 *not sure how else to address this...?
+human_needs_sids_2020 <- human_needs_sids %>%
+  filter(year == 2020) %>%
+  select(-diff_gross_domestic_product, -diff_human_development_index, -diff_human_needs) %>%#dont need these right now
+  mutate(across(starts_with("diff_"), ~replace_na(., 0)))
+
+# Identify the nation that needs the most help (which is weighted over years)
+most_needs_nation <- human_needs_sids_2020$Name[which.max(human_needs_sids_2020$human_needs)]
+
+# Filter the data for the most needs nation
+most_needs_nation_data <- human_needs_sids_2020 %>%
+  filter(Name == most_needs_nation)
+
+# Identify the most important Category associated with this nation (While considering the order of importance)
+
+#*how important IS the difference though??? calculate relative strength?? Could use correlative numbers generated from the matrix..?
+
+print(impact_index)
+
+#maybe take this number, then multiply it into the list then refilter by descending order??
+
+# Filter the columns that start with "diff_"
+filtered_data <- most_needs_nation_data[startsWith(names(most_needs_nation_data), "diff_")]
+
+# Identify the most important Category associated with this nation by the designated order of importance
+most_important_category <- names(filtered_data)[which.max(unlist(filtered_data))]
+
+# Get the value associated with the most important category for the most needs nation
+most_important_value <- most_needs_nation_data[[most_important_category]]
+
+# Create the new dataframe
+help_most_needs_nation <- data.frame(
+  most_needs_nation = most_needs_nation,
+  most_important_category = most_important_category,
+  most_important_value = most_important_value
+)
+
+help_most_needs_nation
+
+```
+
+4 Create an ordered list??? version 2 from above
+```{r}
+# Filter data for the year 2020 and replace NA values with 0
+human_needs_sids_2020 <- human_needs_sids %>%
+  filter(year == 2020) %>%
+  select(-diff_gross_domestic_product, -diff_human_development_index, -diff_human_needs) %>% #don't need these right now
+  mutate(across(starts_with("diff_"), ~replace_na(., 0)))
+
+# Sort the data frame in descending order based on human_needs
+human_needs_sids_2020 <- human_needs_sids_2020 %>%
+  arrange(desc(human_needs))
+
+# Initialize empty lists to store the information
+names_list <- list()
+categories_list <- list()
+values_list <- list()
+
+# Iterate through the sorted nations
+for (nation in human_needs_sids_2020$Name) {
+  # Filter the data for the current nation
+  nation_data <- human_needs_sids_2020 %>%
+    filter(Name == nation)
+
+  # Identify the most important Category associated with this nation (While considering the order of importance)
+  # Filter the columns that start with "diff_"
+  filtered_data <- nation_data[startsWith(names(nation_data), "diff_")]
+
+  # Identify the most important Category associated with this nation by the designated order of importance
+  most_important_category <- names(filtered_data)[which.max(unlist(filtered_data))]
+
+  # Get the value associated with the most important category for the current nation
+  most_important_value <- nation_data[[most_important_category]]
+
+  # Store the name, category, and value in their respective lists
+  names_list[[nation]] <- nation
+  categories_list[[nation]] <- most_important_category
+  values_list[[nation]] <- most_important_value
+}
+
+# Combine the lists into a data frame
+help_most_needs_nation <- data.frame(
+  most_needs_nation = unlist(names_list),
+  most_important_category = unlist(categories_list),
+  most_important_value = unlist(values_list)
+)
+
+# Drop the row names (index column)
+rownames(help_most_needs_nation) <- NULL
+
+# Print the resulting data frame
+print(help_most_needs_nation)
+
+```
+5 visualize
+```{r}
+# Create the color-coded table (heatmap-like visualization)
+heatmap_table <- ggplot(help_most_needs_nation, aes(x = most_important_category, y = most_needs_nation, fill = most_important_value)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c() +  # You can choose other color scales, e.g., scale_fill_gradientn(colors = c("blue", "white", "red"))
+  labs(title = "Most Important Categories by Nation (2020)",
+       x = "Category",
+       y = "Nation",
+       fill = "Value") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the heatmap-like visualization
+print(heatmap_table)
+```
+* not sure why we're missing a column. will need to re-address on the debug.
+
+
+C. K-means
+1 elbow
+```{r}
+# Perform k-means clustering with the scaled data
+scaled_data <- scale(help_most_needs_nation[, 3])  # Scaling the numeric values
+k_range <- 1:5  # Define the range of k (number of clusters) to try
+
+# Create a data frame to store the sum of squared distances for each k
+sse_df <- data.frame(k = numeric(length(k_range)), sse = numeric(length(k_range)))
+
+for (k in k_range) {
+  kmeans_result <- kmeans(scaled_data, centers = k, nstart = 25)
+  sse_df[k, ] <- c(k, kmeans_result$tot.withinss)
+}
+
+# Plot the elbow method to identify the optimal number of clusters
+elbow_plot <- ggplot(sse_df, aes(x = k, y = sse)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Elbow Method for Optimal k",
+       x = "Number of Clusters (k)",
+       y = "Total Within Sum of Squares (SSE)") +
+  theme_minimal()
+
+print(elbow_plot)
+
+```
+
+2 k-means!
+```{r}
+# Perform k-means clustering with 2 clusters and the scaled data
+scaled_data <- scale(help_most_needs_nation[, 3])  # Scaling the numeric values
+k <- 2
+
+kmeans_result <- kmeans(scaled_data, centers = k, nstart = 25)
+
+# Add the cluster assignment to the data frame
+help_most_needs_nation$cluster <- factor(kmeans_result$cluster)
+
+# Print the cluster centers
+cluster_centers <- kmeans_result$centers
+print(cluster_centers)
+
+# Plot the data points with clusters indicated by color
+cluster_plot <- ggplot(help_most_needs_nation, aes(x = most_needs_nation, y = most_important_value, fill = cluster, label = most_important_category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Clustered Nations",
+       x = "Nations",
+       y = "Most Important Category Value",
+       fill = "Cluster") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+interactive_plot <- ggplotly(cluster_plot)
+
+print(interactive_plot)
+```
+
+3 leaflet *need to debug color and label
+```{r}
+# Get world countries' geometries in GeoJSON format
+countries_geojson <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Extract the vector of country names to highlight from the "most_needs_nation" column
+highlight_countries <- help_most_needs_nation$most_needs_nation
+
+# Filter the world map data to include only the highlighted countries
+highlighted_countries <- countries_geojson %>%
+  filter(name %in% highlight_countries)
+  
+# Create a continuous color palette based on row number
+color_palette <- colorNumeric(palette = "Blues", domain = 1:nrow(help_most_needs_nation))
+
+# Plot the map
+leaflet(highlighted_countries) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(
+    fillColor = ~color_palette,
+    fill = "blue", # Fill color for the highlighted countries
+    fillOpacity = 0.6,
+    color = "white",
+    weight = 1,
+    label = most_needs_nation
+  )
+```
+
+4 *predict next year? *eh will work on later. skip. not important. could add weight to who we need to help now.
+```{r}
+# Filter data up to the year 2019 for training
+training_data <- human_needs_sids %>%
+  filter(year <= 2019) %>%
+  mutate(across(starts_with("diff_"), ~replace_na(., 0)))
+
+# Filter data for the year 2020 for testing
+testing_data <- human_needs_sids %>%
+  filter(year == 2020) %>%
+  mutate(across(starts_with("diff_"), ~replace_na(., 0)))
+
+# Build a decision tree model using the training data
+model <- rpart(Name ~ ., data = training_data)
+
+# Make predictions on the testing data
+predictions <- predict(model, newdata = testing_data, type = "class")
+
+# Extract the predicted most important category for each nation in 2020
+predicted_most_important_category <- as.character(predictions)
+
+# Get the value associated with the predicted most important category for each nation in 2020
+predicted_most_important_value <- testing_data[[most_important_category]]
+
+# Create the new dataframe with the predictions
+predicted_next_year <- data.frame(
+  most_needs_nation = most_needs_nation,
+  most_important_category = predicted_most_important_category,
+  most_important_category_value = predicted_most_important_value
+)
+
+# Print the predictions
+print(predicted_next_year)
+```
+
+
+V. Applicability
+
+B.1 There should be a way to somehow click on that nation, and see these most important scores
+
+C.1 Display them against singapore to see how much investment is required to change each metric? and compare that average to the current year?
+
+D. I want to be able to figure out the impact of each dollar though. We know what needs the most help, but what will be the most impactful to change?
+
+
+VI. Investors/ Loan Platform Information
+
+I'll use Kiva as an example, but future projects could work with other companies (microfinance) to aggregate options for people to choose from including:
+https://www.grameenamerica.org/program
+https://cdcloans.com/impact-investments/
+https://www.pacificcommunityventures.org/
+https://bracusa.org/
+
+I'm going to skip the stuff above to try and get this project to turn over completely. We could do more visual stuff like that to determine precision and accuracy since we have most of the stuff weighted and considered, but that might take a lot of time... I still have to debug and optimise a handful of things too.. will see. (7/24/23 -mk)
+
+Going to pair these top two together, then I need to figure out how to divide by sectors...
+Kiva Projects References:
+https://rpubs.com/aammd/kivascrape Retrieval of Data/ Division by Countries
+https://github.com/Offrampq/kiva_data Daily Scraping code
+
+
+https://www.linkedin.com/pulse/big-data-analysis-kivaorg-ryan-papera Loan Default rates
+
+
+A. Scrape Kiva by Country
+
+1 code used to reverse engineer location of important data features
+
+```{r}
+# Read the HTML content from the webpage
+page <- read_html("https://www.kiva.org/lend/2607186")
+
+# Find the HTML element that contains the text
+target_element <- page %>%
+  html_nodes(xpath = "//*[contains(text(), 'Amount')]")
+
+# Extract the text from the target element
+extracted_text <- html_text(target_element)
+
+# Print the extracted text
+print(extracted_text)
+
+```
+2 Refine Process
+```{r}
+# Read the HTML content from the webpage
+page <- read_html("https://www.kiva.org/lend/2607186")
+
+# Extract the HTML content as a character string
+html_content <- as.character(page)
+
+# Extract the name using regular expression
+name <- regmatches(html_content, regexpr('(?<=\"name\":\\\")[^"]+', html_content, perl = TRUE))
+
+# Extract the fundraising percent using regular expression
+fundraising_percent <- regmatches(html_content, regexpr('(?<=\"fundraisingPercent\":)[0-9.]+', html_content, perl = TRUE))
+
+# Extract the borrower reference using regular expression
+borrower_ref <- regmatches(html_content, regexpr('(?<=\"__ref\":\"Borrower:)\\d+', html_content, perl = TRUE))
+
+# Extract the loan amount using regular expression
+loan_amount <- regmatches(html_content, regexpr('(?<="loanAmount\":\\\\")[^"]+', html_content, perl = TRUE))
+
+# Borrower Id
+print("Borrower Reference: ")
+print(borrower_ref)
+
+# Print the Country to match our plot eventually
+print("Country: ")
+print(name)
+
+# Loan Applicant Name
+
+# Total dollar amount to fund
+print("Loan Amount:")
+print(loan_amount)
+
+# Percent funded
+print("Loan Funding Percent: ")
+print(fundraising_percent)
+
+```
+*need to contextualize what to pick based on the category that arises; slum = invest in anything? etc. Are all needs being addressed independently??
+
+3 Need to figure out how to pick the next best person/ group of people in order.
+```{r}
+#gonna try use the api instead
+
+# API endpoint
+api_url <- "https://api.kivaws.org/graphql"
+
+# Your GraphQL query
+graphql_query <- 
+'{
+  lend {
+    loans {
+      totalCount
+      values {
+        name
+        loanAmount
+        image {
+          url(presetSize: small)
+        }
+        activity {
+          name
+        }
+        geocode {
+          country {
+            isoCode
+            name
+          }
+        }
+        lenders (limit: 0) {
+          totalCount
+        }
+      }
+    }
+  }
+}
+'
+
+# Set headers for the request
+headers <- c('Content-Type' = 'application/json')
+
+# Make the API request
+response <- httr::POST(url = api_url, body = graphql_query, encode = "json", httr::add_headers(.headers=headers))
+
+# Check if the request was successful
+if (httr::status_code(response) == 200) {
+  # Parse the JSON response
+  api_data <- fromJSON(rawToChar(response$content))
+
+  # Extract the loan data
+  loan_data <- api_data$lend$loan
+
+  # Print the extracted data
+  print(loan_data)
+} else {
+  # Handle the error if the API request was not successful
+  print("API request failed.")
+}
+```
+
+4
+It would be great to be able to then take this information, and then take you to http://www.kivalens.org/ which allows for you to aggregate purchase multiple loans for example which then go into your kiva basket, then the whole project would be complete!
+
+"Auto-Lending Preferences Kiva has had Auto-Lending for years but the options are a bit anemic. Since browser extensions have far more permissions than a web page does, KivaLens is able to tell the extension to alter your auto-lending settings on Kiva. KivaLens offers extensive partner criteria as well as portfolio balancing for Sector, Country and Activity. When you use KivaLens in conjunction with Kiva Lender Assistant Chrome Extension you can easily set your auto-lending preferences and take full advantage of Kiva's feature."
+
+Feel like there could be a bridge between this data analytics project and this app. Would be interested in further developing.
+
+
+
+
+
+
+
+
+
+Class Reference:
+
+1. Histogram
+
+This code chunk below creates a histogram that shows the distribution of Development across 190 countries colored by whether the country is Small Island Developing State (SIDS) or not
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = gross_domestic_product,
+                                     fill = sids_context
+                                     )) +
+  geom_histogram(bins = 65, color = "black") +
+  theme_minimal()
+```
+
+
+
+2. Scatter Plots
+
+Create a scatter plot with education on the x axis and the human development index on the y axis
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index)) +
+  geom_point() +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+
+
+```
+Now add a trend line with geom_smooth() and a p value and correlation coefficient with stat_cor()
+
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+```
+
+Now split the plot into two for Small Island Developing States (SIDS) and non-SIDS 
+ - Warning -> Be cautious of using trend lines, p-values, and correlation coefficients with <30 data points (in this case countries)
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  facet_wrap(~sids_context) +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+```
+Now add color indicating rural population
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index,
+                                     color = rural_population)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n') +
+  facet_wrap(~sids_context) +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+```
+
+Lastly, make the plot interactive, adding label = Name so we can see which point is which country by hovering, and by naming it and inputting it into ggplotly()
+
+
+```{r}
+education_hdi_gdp_plot <- ggplot(data = nd_gain_most_recent_wider, aes(x = education,
+                                     y = human_development_index,
+                                     color = rural_population,
+                                     label = Name)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(method = "pearson", output.type = "text", label.sep='\n', label.x = 20) +
+  facet_wrap(~sids_context) +
+  labs(title = "Education and Human Development Index, ND-GAIN Most Recent Data",
+       x = "education",
+       y = "human development index") +
+  theme_minimal()
+
+ggplotly(education_hdi_gdp_plot)
+```
+
+
+3. Interactive Scatter Plot without Trend Lines
+- Sometimes, we don't intend to show a trend with a scatter plot
+
+
+Use a scatter plot to display projected change of sea level rise and engagement in international environmental conventions, color by SIDS or non-SIDS
+
+
+```{r}
+engagement_impacts_plot <- ggplot(data = nd_gain_most_recent_wider, aes(x = engagement_in_international_environmental_conventions, 
+                                             y = projected_change_of_sea_level_rise_impacts, 
+                                             color = sids_context,
+                                             label = Name)) +
+  geom_point() +
+  labs(title = "Projected Change of Sea level Rise Impacts / Engagement in International Environmental Conventions",
+       subtitle = "ND-GAIN Data",
+       x = "engagement in international environmental conventions",
+       y = "projected change of sea level rise impacts") +
+  theme_minimal()
+
+ggplotly(engagement_impacts_plot)
+```
+
+
+
+4. Subset Data and Create a Bar Chart
+
+Subset Data for only SIDS
+
+```{r}
+nd_gain_most_recent_wider_sids <- nd_gain_most_recent_wider %>% 
+  filter(sids_context == "sids")
+```
+
+Create Bar Chart showing Food Import Dependency in SIDS 
+
+```{r}
+ggplot(data = nd_gain_most_recent_wider_sids, aes(x = food_import_dependency, 
+                                                  y = reorder(Name,food_import_dependency))) + 
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  labs(title = "Food Import Dependency, SIDS",
+       x = "proportion of cereal consumption obtained from imports",
+       y = "")+
+  theme_minimal() 
+  
+```
+
+
+
+
+
